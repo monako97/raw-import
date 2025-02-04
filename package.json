@@ -1,0 +1,26 @@
+{
+    "name": "@moneko/raw-import",
+    "version": "0.0.1",
+    "description": "Another wasm swc raw import plugin",
+    "author": "moneko",
+    "license": "MIT",
+    "keywords": [
+        "swc-plugin",
+        "swc",
+        "transform",
+        "import",
+        "wasm",
+        "wasi",
+        "rust",
+        "webassembly",
+        "raw",
+        "raw-import"
+    ],
+    "main": "raw_import.wasm",
+    "scripts": {
+        "prepublishOnly": "cargo build-wasip1 && mv ./target/wasm32-wasip1/release/swc_plugin_raw_import.wasm ./raw_import.wasm"
+    },
+    "files": [
+        "raw_import.wasm"
+    ]
+}

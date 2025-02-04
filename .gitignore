@@ -1,0 +1,12 @@
+/target
+.idea
+.DS_Store
+.vscode
+.swc
+node_modules
+dist
+lib
+types
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

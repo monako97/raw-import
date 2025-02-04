@@ -1,0 +1,5 @@
+[toolchain]
+components = [
+    "wasm32-wasip1"
+]
+profile = "minimal"
