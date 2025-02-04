@@ -1,6 +1,6 @@
 {
     "name": "@moneko/raw-import",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Another wasm swc raw import plugin",
     "author": "moneko",
     "license": "MIT",
