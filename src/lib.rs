@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
-use swc_core::common::DUMMY_SP;
+use swc_core::common::{
+    DUMMY_SP,
+    SyntaxContext
+};
 use swc_core::ecma::{
     ast::*,
     visit::{FoldWith, Fold},
@@ -10,7 +13,7 @@ use swc_core::plugin::{
     proxies::TransformPluginProgramMetadata,
     metadata::TransformPluginMetadataContextKind
 };
-
+use path_clean::clean;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -24,7 +27,7 @@ pub struct RawImport {
 
 impl RawImport {
     pub fn new(root_dir: String, current_path: String) -> Self {
-        let mut cwd = PathBuf::from("/cwd");
+        let mut cwd = PathBuf::from(&root_dir);
         let current = current_path.replace(&root_dir, "");
 
         // 移除开头的斜杠
@@ -37,24 +40,53 @@ impl RawImport {
         }
 
         RawImport {
-            root: PathBuf::from("/cwd"),
+            root: PathBuf::from(&root_dir),
             cwd,
         }
     }
 
     fn read_file(&mut self, raw_path: String) -> String {
-        let is_relative = raw_path.starts_with('.');
-        let path = if is_relative {
-            self.cwd.join(PathBuf::from(raw_path))
+        let clean_raw_path = raw_path.replace('\0', "");
+        let is_sandboxed = fs::read_dir(&self.root).is_err();
+
+        if is_sandboxed {
+            panic!(
+                "SANDBOXED ENVIRONMENT DETECTED: Cannot read files in SWC plugin runtime.\n\
+                File requested: {}\n\
+                Root directory: {}\n\
+                \n\
+                SOLUTION: This SWC plugin cannot read external files due to security restrictions.\n\
+                Consider one of these approaches:\n\
+                1. Pass file content as plugin configuration instead of file paths\n\
+                2. Use a build-time step to inline file contents\n\
+                3. Use a different approach that doesn't require runtime file access\n\
+                \n\
+                The ?raw import syntax cannot work in this sandboxed environment.",
+                clean_raw_path,
+                self.root.display()
+            );
+        }
+
+        let is_relative = clean_raw_path.starts_with('.');
+        let path: PathBuf = if is_relative {
+            self.cwd.join(PathBuf::from(&clean_raw_path))
         } else {
             self.root
                 .join("node_modules")
-                .join(raw_path)
+                .join(&clean_raw_path)
         };
+        let path_normal = clean(&path);
 
-        match fs::read_to_string(&path) {
+        // Verify the cleaned path doesn't contain NUL bytes
+        if let Some(path_str) = path_normal.to_str() {
+            if path_str.contains('\0') {
+                panic!("Path contains NUL byte after cleaning: {:?}", path_str);
+            }
+        }
+
+        match fs::read_to_string(&path_normal) {
             Ok(s) => s,
-            Err(err) => panic!("Failed to read {}: {}", path.display(), err),
+            Err(err) => panic!("Failed to read {}: {}", path_normal.display(), err),
         }
     }
 }
@@ -80,6 +112,7 @@ impl Fold for RawImport {
                                 let var_decl = VarDecl {
                                     span: DUMMY_SP,
                                     kind: VarDeclKind::Const,
+                                    ctxt: SyntaxContext::empty(),
                                     decls: vec![VarDeclarator {
                                         span: DUMMY_SP,
                                         name: Pat::Ident(default_spec.local.clone().into()),
