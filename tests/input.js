@@ -1,0 +1,1 @@
+import packages from "./package.json?raw";

@@ -13,7 +13,6 @@ use swc_core::plugin::{
     proxies::TransformPluginProgramMetadata,
     metadata::TransformPluginMetadataContextKind
 };
-use path_clean::clean;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -27,7 +26,7 @@ pub struct RawImport {
 
 impl RawImport {
     pub fn new(root_dir: String, current_path: String) -> Self {
-        let mut cwd = PathBuf::from(&root_dir);
+        let mut cwd = PathBuf::from("/cwd");
         let current = current_path.replace(&root_dir, "");
 
         // 移除开头的斜杠
@@ -40,53 +39,25 @@ impl RawImport {
         }
 
         RawImport {
-            root: PathBuf::from(&root_dir),
+            root: PathBuf::from("/cwd"),
             cwd,
         }
     }
 
     fn read_file(&mut self, raw_path: String) -> String {
-        let clean_raw_path = raw_path.replace('\0', "");
-        let is_sandboxed = fs::read_dir(&self.root).is_err();
-
-        if is_sandboxed {
-            panic!(
-                "SANDBOXED ENVIRONMENT DETECTED: Cannot read files in SWC plugin runtime.\n\
-                File requested: {}\n\
-                Root directory: {}\n\
-                \n\
-                SOLUTION: This SWC plugin cannot read external files due to security restrictions.\n\
-                Consider one of these approaches:\n\
-                1. Pass file content as plugin configuration instead of file paths\n\
-                2. Use a build-time step to inline file contents\n\
-                3. Use a different approach that doesn't require runtime file access\n\
-                \n\
-                The ?raw import syntax cannot work in this sandboxed environment.",
-                clean_raw_path,
-                self.root.display()
-            );
-        }
-
-        let is_relative = clean_raw_path.starts_with('.');
+        let is_relative = raw_path.starts_with('.');
         let path: PathBuf = if is_relative {
-            self.cwd.join(PathBuf::from(&clean_raw_path))
+            self.cwd.join(PathBuf::from(&raw_path))
         } else {
             self.root
                 .join("node_modules")
-                .join(&clean_raw_path)
+                .join(&raw_path)
         };
-        let path_normal = clean(&path);
+        let names = normalize_path(path.display().to_string().replace("\0", ""));
 
-        // Verify the cleaned path doesn't contain NUL bytes
-        if let Some(path_str) = path_normal.to_str() {
-            if path_str.contains('\0') {
-                panic!("Path contains NUL byte after cleaning: {:?}", path_str);
-            }
-        }
-
-        match fs::read_to_string(&path_normal) {
+        match fs::read_to_string(&names) {
             Ok(s) => s,
-            Err(err) => panic!("Failed to read {}: {}", path_normal.display(), err),
+            Err(err) => panic!("Failed to read {}: {}", names, err),
         }
     }
 }
@@ -123,7 +94,7 @@ impl Fold for RawImport {
                                         })))),
                                         definite: false,
                                     }],
-                                    declare: true,
+                                    declare: false,
                                 };
                                 
                                 new_items.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(var_decl)))));
@@ -161,4 +132,102 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
         .unwrap();
     
     program.fold_with(&mut RawImport::new(root_dir, current_path.to_string()))
+}
+// rust格式化路径
+fn normalize_path(path: String) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    let is_absolute = path.starts_with('/');
+    let starts_with_dot = path.starts_with("./");
+    
+    // Split path by '/' and filter out empty parts and '.'
+    for part in path.split('/') {
+        match part {
+            "" | "." => continue, // Skip empty parts and current directory
+            ".." => {
+                // Go up one directory level
+                if !parts.is_empty() && parts.last() != Some(&"..") {
+                    parts.pop();
+                } else if !is_absolute {
+                    // Only add ".." for relative paths when we can't go further up
+                    parts.push("..");
+                }
+            }
+            _ => parts.push(part),
+        }
+    }
+    
+    // Reconstruct the path
+    let mut result = if is_absolute {
+        "/".to_string()
+    } else if starts_with_dot && !parts.is_empty() {
+        "./".to_string()
+    } else if parts.is_empty() && starts_with_dot {
+        ".".to_string()
+    } else {
+        String::new()
+    };
+    
+    // Join the parts
+    if !parts.is_empty() {
+        if is_absolute {
+            result.push_str(&parts.join("/"));
+        } else if starts_with_dot {
+            result.push_str(&parts.join("/"));
+        } else {
+            result = parts.join("/");
+        }
+    } else if is_absolute {
+        // Keep just "/" for absolute root
+        result = "/".to_string();
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_path() {
+        // Test cases from the examples
+        assert_eq!(
+            normalize_path("/workspaces/raw-import//./package.json".to_string()),
+            "/workspaces/raw-import/package.json"
+        );
+        
+        assert_eq!(
+            normalize_path("/workspaces/raw-import/..//./package.json".to_string()),
+            "/workspaces/package.json"
+        );
+        
+        assert_eq!(
+            normalize_path("./A/../package.json".to_string()),
+            "./package.json"
+        );
+        assert_eq!(
+            normalize_path("/cwd//./package.json".to_string()),
+            "/cwd/package.json"
+        );
+        // Additional test cases
+        assert_eq!(
+            normalize_path("/a/b/c/../d".to_string()),
+            "/a/b/d"
+        );
+        
+        assert_eq!(
+            normalize_path("../a/b".to_string()),
+            "../a/b"
+        );
+        
+        assert_eq!(
+            normalize_path("./a/./b/../c".to_string()),
+            "./a/c"
+        );
+        
+        assert_eq!(
+            normalize_path("/".to_string()),
+            "/"
+        );
+        
+    }
 }

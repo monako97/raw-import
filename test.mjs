@@ -1,7 +1,8 @@
 import { transform } from "@swc/core";
+import fs from "fs";
 
-const input = `import packages from "./package.json?raw";`;
-const output = `const packages = "MIT License...";`;
+const input = fs.readFileSync("./tests/input.js", "utf-8");
+const output = "var packages = '" + JSON.stringify(JSON.parse(fs.readFileSync("./package.json", "utf-8")), null, 3).replaceAll(/\n/g, '\\n').replace(/^"/, "").replace(/"$/, "") + "\\n;";
 
 const cwd = process.cwd();
 
