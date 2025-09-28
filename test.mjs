@@ -1,8 +1,8 @@
 import { transform } from "@swc/core";
 import fs from "fs";
 
-const input = fs.readFileSync("./tests/input.js", "utf-8");
-const output = "var packages = '" + JSON.stringify(JSON.parse(fs.readFileSync("./package.json", "utf-8")), null, 3).replaceAll(/\n/g, '\\n').replace(/^"/, "").replace(/"$/, "") + "\\n;";
+const input = `import packages from "./package.json?raw";`;
+const output = "var packages = '" + JSON.stringify(JSON.parse(fs.readFileSync("./package.json", "utf-8")), null, 4).replaceAll(/\n/g, '\\n').replace(/^"/, "").replace(/"$/, "") + "\\n';";
 
 const cwd = process.cwd();
 
@@ -25,8 +25,8 @@ transform(input, {
     if (code?.trim() === output.trim()) {
       console.log("Test passed!");
     } else {
-      console.log("Expected Output:\n", output);
-      console.log("Actual Output:\n", code);
+      console.log("Expected Output:\n", output.trim(), output.trim().length);
+      console.log("Actual Output:\n", code?.trim(), code?.trim().length);
       throw new Error("Test failed: Output did not match expected output");
     }
   })
