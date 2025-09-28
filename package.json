@@ -18,7 +18,7 @@
     ],
     "main": "raw_import.wasm",
     "scripts": {
-        "prepublishOnly": "cargo build-wasip1 && rm -rf ./raw_import.wasm && mv ./target/wasm32-wasip1/release/swc_plugin_raw_import.wasm ./raw_import.wasm && pnpm i && node ./test.mjs"
+        "prepublishOnly": "cargo build-wasip1 && rm -rf ./raw_import.wasm && mv ./target/wasm32-wasip1/release/swc_plugin_raw_import.wasm ./raw_import.wasm && npm i && node ./test.mjs"
     },
     "files": [
         "raw_import.wasm"
