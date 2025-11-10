@@ -70,7 +70,7 @@ impl Fold for RawImport {
             match item {
                 // 处理带有?raw的导入声明
                 ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) => {
-                    let src_str = import_decl.src.value.to_string();
+                    let src_str = import_decl.src.value.as_str().unwrap_or_default().to_string();
                     
                     if let Some((path, _)) = src_str.split_once("?raw") {
                         // 处理每个导入说明符
@@ -129,7 +129,7 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
         .expect("Should provide `rootDir` in plugin config");
     let current_path = metadata
         .get_context(&TransformPluginMetadataContextKind::Filename)
-        .unwrap();
+        .unwrap_or_else(|| root_dir.clone());
     
     program.fold_with(&mut RawImport::new(root_dir, current_path.to_string()))
 }
